@@ -7,7 +7,11 @@ import (
 	"net/http"
 )
 
-func errorBody(er error) []byte {
+func errorJSONBody(w http.ResponseWriter, returnCode int, er error) {
+	w.Header().Set("Content-Type", "application/json")
+	if returnCode <= 0 {
+		returnCode = 500 // Default
+	}
 	type errorOut struct {
 		Error string `json:"error"`
 	}
@@ -16,9 +20,28 @@ func errorBody(er error) []byte {
 	}
 	dat, err := json.Marshal(out)
 	if err != nil {
-		return []byte(err.Error())
+		log.Fatal(err.Error())
+		return
 	}
-	return dat
+	w.WriteHeader(returnCode)
+	w.Write(dat)
+	return
+}
+
+func respondJSONBody(w http.ResponseWriter, returnCode int, payload interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	dat, err := json.Marshal(payload)
+	if err == nil {
+		w.WriteHeader(returnCode)
+		_, err := w.Write([]byte(dat))
+		if err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		errorJSONBody(w, 500, err)
+		log.Fatal(err)
+	}
+
 }
 
 func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
@@ -31,25 +54,15 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
 	reqin := reqIn{}
 	err := decoder.Decode(&reqin)
-	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
 		log.Println(err)
-		w.WriteHeader(500)
-		w.Write(errorBody(err))
+		errorJSONBody(w, 500, err)
 		return
 	}
 	if len(reqin.Body) > 140 {
 		log.Println("Chirp is too long!")
-		w.WriteHeader(400)
-		w.Write(errorBody(errors.New("Chirp is too long")))
+		errorJSONBody(w, 400, errors.New("Chirp is too long"))
 		return
 	}
-	dat, err := json.Marshal(resOut{Valid: true})
-	if err != nil {
-		w.WriteHeader(500)
-		w.Write(errorBody(err))
-		return
-	}
-	w.WriteHeader(200)
-	w.Write(dat)
+	respondJSONBody(w, 200, resOut{Valid: true})
 }
