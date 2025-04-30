@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strings"
 )
 
 func errorJSONBody(w http.ResponseWriter, returnCode int, er error) {
@@ -44,12 +45,34 @@ func respondJSONBody(w http.ResponseWriter, returnCode int, payload interface{})
 
 }
 
+func censorProfanity(s string) string {
+	badWords := []string{"kerfuffle", "sharbert", "fornax"}
+	var out []string
+	bad := false
+	for _, elm := range strings.Split(s, " ") {
+		for _, badWord := range badWords {
+			if strings.ToLower(elm) == badWord {
+				bad = true
+				break
+			}
+		}
+		if bad {
+			out = append(out, "****")
+			bad = false
+		} else {
+			out = append(out, elm)
+		}
+	}
+	return strings.Join(out, " ")
+}
+
 func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 	type reqIn struct {
 		Body string `json:"body"`
 	}
 	type resOut struct {
-		Valid bool `json:"valid"`
+		Valid       bool   `json:"valid"`
+		CleanedBody string `json:"cleaned_body"`
 	}
 	decoder := json.NewDecoder(r.Body)
 	reqin := reqIn{}
@@ -64,5 +87,7 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 		errorJSONBody(w, 400, errors.New("Chirp is too long"))
 		return
 	}
-	respondJSONBody(w, 200, resOut{Valid: true})
+	out := resOut{Valid: true}
+	out.CleanedBody = censorProfanity(reqin.Body)
+	respondJSONBody(w, 200, out)
 }
