@@ -1,21 +1,35 @@
 package main
 
 import (
+	"database/sql"
 	"log"
 	"net/http"
+	"os"
 	"sync/atomic"
+
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
+	"github.com/savisitor15/go-http-serv/internal/database"
 )
 
 type apiConfig struct {
 	fileserverHits atomic.Int32
+	dbConnection   *database.Queries
 }
 
 func main() {
+	godotenv.Load(".env")
+	dbUrl := os.Getenv("DB_URL")
 	const filepathRoot = "."
 	const port = "8080"
 
+	db, err := sql.Open("postgres", dbUrl)
+	if err != nil {
+		log.Fatal(err)
+	}
 	apiCfg := apiConfig{
 		fileserverHits: atomic.Int32{},
+		dbConnection:   database.New(db),
 	}
 
 	mux := http.NewServeMux()
