@@ -77,3 +77,23 @@ func (cfg *apiConfig) handlerAddChirp(w http.ResponseWriter, r *http.Request) {
 	out.User = chirp.UserID
 	respondJSONBody(w, 201, out)
 }
+
+func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
+	type resOut struct {
+		ID        uuid.UUID `json:"id"`
+		CreatedAt time.Time `json:"created_at"`
+		UpdatedAt time.Time `json:"updated_at"`
+		Body      string    `json:"body"`
+		UserID    uuid.UUID `json:"user_id"`
+	}
+	chirps, err := cfg.dbConnection.GetAllChirps(r.Context())
+	if err != nil {
+		log.Println("Error getting chirps", err)
+	}
+	// reformat so JSON stays consistent
+	out := make([]resOut, len(chirps))
+	for idx, elm := range chirps {
+		out[idx] = resOut(elm)
+	}
+	respondJSONBody(w, 200, out)
+}
