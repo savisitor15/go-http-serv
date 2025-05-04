@@ -5,6 +5,10 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/savisitor15/go-http-serv/internal/database"
 )
 
 func censorProfanity(s string) string {
@@ -28,13 +32,17 @@ func censorProfanity(s string) string {
 	return strings.Join(out, " ")
 }
 
-func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) handlerAddChirp(w http.ResponseWriter, r *http.Request) {
 	type reqIn struct {
-		Body string `json:"body"`
+		Body string    `json:"body"`
+		User uuid.UUID `json:"user_id"`
 	}
 	type resOut struct {
-		Valid       bool   `json:"valid"`
-		CleanedBody string `json:"cleaned_body"`
+		ID        uuid.UUID `json:"id"`
+		CreatedAt time.Time `json:"created_at"`
+		UpdatedAt time.Time `json:"updated_at"`
+		Body      string    `json:"body"`
+		User      uuid.UUID `json:"user_id"`
 	}
 	reqin := reqIn{}
 	err := decodeRequestBody(r, &reqin)
@@ -48,7 +56,24 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 		errorJSONBody(w, 400, errors.New("Chirp is too long"))
 		return
 	}
-	out := resOut{Valid: true}
-	out.CleanedBody = censorProfanity(reqin.Body)
-	respondJSONBody(w, 200, out)
+	// We should have a valid chirp to add now
+	ts := time.Now()
+	params := database.CreateChirpParams{
+		CreatedAt: ts,
+		UpdatedAt: ts,
+		Body:      censorProfanity(reqin.Body),
+		UserID:    reqin.User,
+	}
+	chirp, err := cfg.dbConnection.CreateChirp(r.Context(), params)
+	if err != nil {
+		log.Println("Error creating chirp", err)
+		errorJSONBody(w, 500, err)
+	}
+	out := resOut{}
+	out.ID = chirp.ID
+	out.Body = chirp.Body
+	out.CreatedAt = chirp.CreatedAt
+	out.UpdatedAt = chirp.UpdatedAt
+	out.User = chirp.UserID
+	respondJSONBody(w, 201, out)
 }
