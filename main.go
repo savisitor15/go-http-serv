@@ -39,6 +39,7 @@ func main() {
 	// Chirp management
 	mux.HandleFunc("POST /api/chirps", apiCfg.handlerAddChirp)
 	mux.HandleFunc("GET /api/chirps", apiCfg.handlerGetChirps)
+	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handlerGetChirpByID)
 	// Users management
 	mux.HandleFunc("POST /api/users", apiCfg.handleUserCreation)
 

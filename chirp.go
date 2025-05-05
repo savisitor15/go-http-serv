@@ -11,6 +11,23 @@ import (
 	"github.com/savisitor15/go-http-serv/internal/database"
 )
 
+type ChirpJSON struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Body      string    `json:"body"`
+	UserID    uuid.UUID `json:"user_id"`
+}
+
+func (c *ChirpJSON) ConvertChirpFromDB(chirp database.Chirp) ChirpJSON {
+	c.ID = chirp.ID
+	c.Body = chirp.Body
+	c.CreatedAt = chirp.CreatedAt
+	c.UpdatedAt = chirp.UpdatedAt
+	c.UserID = chirp.UserID
+	return *c
+}
+
 func censorProfanity(s string) string {
 	badWords := []string{"kerfuffle", "sharbert", "fornax"}
 	var out []string
@@ -37,13 +54,6 @@ func (cfg *apiConfig) handlerAddChirp(w http.ResponseWriter, r *http.Request) {
 		Body string    `json:"body"`
 		User uuid.UUID `json:"user_id"`
 	}
-	type resOut struct {
-		ID        uuid.UUID `json:"id"`
-		CreatedAt time.Time `json:"created_at"`
-		UpdatedAt time.Time `json:"updated_at"`
-		Body      string    `json:"body"`
-		User      uuid.UUID `json:"user_id"`
-	}
 	reqin := reqIn{}
 	err := decodeRequestBody(r, &reqin)
 	if err != nil {
@@ -69,31 +79,43 @@ func (cfg *apiConfig) handlerAddChirp(w http.ResponseWriter, r *http.Request) {
 		log.Println("Error creating chirp", err)
 		errorJSONBody(w, 500, err)
 	}
-	out := resOut{}
-	out.ID = chirp.ID
-	out.Body = chirp.Body
-	out.CreatedAt = chirp.CreatedAt
-	out.UpdatedAt = chirp.UpdatedAt
-	out.User = chirp.UserID
+	out := ChirpJSON{}
+	out.ConvertChirpFromDB(chirp)
 	respondJSONBody(w, 201, out)
 }
 
 func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
-	type resOut struct {
-		ID        uuid.UUID `json:"id"`
-		CreatedAt time.Time `json:"created_at"`
-		UpdatedAt time.Time `json:"updated_at"`
-		Body      string    `json:"body"`
-		UserID    uuid.UUID `json:"user_id"`
-	}
 	chirps, err := cfg.dbConnection.GetAllChirps(r.Context())
 	if err != nil {
 		log.Println("Error getting chirps", err)
 	}
 	// reformat so JSON stays consistent
-	out := make([]resOut, len(chirps))
+	out := make([]ChirpJSON, len(chirps))
 	for idx, elm := range chirps {
-		out[idx] = resOut(elm)
+		out[idx] = ChirpJSON(elm)
 	}
+	respondJSONBody(w, 200, out)
+}
+
+func (cfg *apiConfig) handlerGetChirpByID(w http.ResponseWriter, r *http.Request) {
+
+	chirpid := r.PathValue("chirpID")
+	//log.Println("Get chirp by id:", r.PathValue("chirpID"))
+	if len(chirpid) == 0 {
+		errorJSONBody(w, 400, errors.New("chirpid provided invalid"))
+		return
+	}
+	uid, err := uuid.Parse(chirpid)
+	if err != nil {
+		errorJSONBody(w, 500, err)
+		return
+	}
+	chirp, err := cfg.dbConnection.GetChirpByID(r.Context(), uid)
+	if err != nil {
+		errorJSONBody(w, 404, err)
+		return
+	}
+	out := ChirpJSON{}
+	out.ConvertChirpFromDB(chirp)
 	respondJSONBody(w, 200, out)
 }
