@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
@@ -108,4 +110,49 @@ func TestValidateJWT(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBearerToken(t *testing.T) {
+	req1, _ := http.NewRequest(http.MethodGet, "/", nil)
+	req2, _ := http.NewRequest(http.MethodGet, "/", nil)
+	userID := uuid.New()
+	validToken, _ := MakeJWT(userID, "secret", time.Hour)
+	header1 := req1.Header
+	header2 := req2.Header
+	header1.Add("Authorization", fmt.Sprintf("Bearer %s", validToken))
+
+	tests := []struct {
+		name      string
+		header    http.Header
+		wantToken string
+		wantErr   bool
+	}{
+		{
+			name:      "CorrectToken",
+			header:    header1,
+			wantToken: validToken,
+			wantErr:   false,
+		},
+		{
+			name:      "BadHeader",
+			header:    header2,
+			wantToken: "",
+			wantErr:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotToken, err := GetBearerToken(tt.header)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetBearerToken() error = %v , wantErr = %v", err, tt.wantErr)
+				return
+			}
+			if gotToken != tt.wantToken {
+				t.Errorf("GetBearerToken() token = %v , wantToken = %v", gotToken, tt.wantToken)
+				return
+			}
+		})
+	}
+
 }
