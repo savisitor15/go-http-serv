@@ -16,14 +16,16 @@ type UserJSON struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Email     string    `json:"email"`
+	Token     string    `json:"token"`
 }
 
-func convertDbUserToJSON(u database.User) UserJSON {
+func convertDbUserToJSON(u database.User, token string) UserJSON {
 	return UserJSON{
 		ID:        u.ID,
 		CreatedAt: u.CreatedAt,
 		UpdatedAt: u.UpdatedAt,
 		Email:     u.Email,
+		Token:     token,
 	}
 }
 
@@ -59,13 +61,22 @@ func (cfg *apiConfig) handleUserCreation(w http.ResponseWriter, r *http.Request)
 		errorJSONBody(w, 500, err)
 		return
 	}
-	respondJSONBody(w, 201, convertDbUserToJSON(dbuser))
+	respondJSONBody(w, 201, convertDbUserToJSON(dbuser, ""))
+}
+
+func ClampExpiryTime(in float64) float64 {
+	def := time.Hour.Seconds()
+	if in > def || in <= 0.0 {
+		return def
+	}
+	return in
 }
 
 func (cfg *apiConfig) handlerCheckLogin(w http.ResponseWriter, r *http.Request) {
 	type reqIn struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
+		Email     string  `json:"email"`
+		Password  string  `json:"password"`
+		ExpiresIn float64 `json:"expires_in_seconds"`
 	}
 	// Out is a UserJSON
 	reqin := reqIn{}
@@ -75,6 +86,7 @@ func (cfg *apiConfig) handlerCheckLogin(w http.ResponseWriter, r *http.Request) 
 		errorJSONBody(w, 500, err)
 		return
 	}
+	reqin.ExpiresIn = ClampExpiryTime(reqin.ExpiresIn)
 	dbuser, err := cfg.dbConnection.GetUserByEmail(r.Context(), reqin.Email)
 	if err != nil {
 		errorJSONBody(w, 404, errors.New("User not found"))
@@ -86,5 +98,11 @@ func (cfg *apiConfig) handlerCheckLogin(w http.ResponseWriter, r *http.Request) 
 		errorJSONBody(w, 401, errors.New("Unauthorized access"))
 		return
 	}
-	respondJSONBody(w, 200, convertDbUserToJSON(dbuser))
+	token, err := auth.MakeJWT(dbuser.ID, cfg.supserSecret, time.Second*time.Duration(reqin.ExpiresIn))
+	if err != nil {
+		log.Println("handlerCheckLogin() failed to generate token", err)
+		errorJSONBody(w, 500, errors.New("Failed to generate token"))
+		return
+	}
+	respondJSONBody(w, 200, convertDbUserToJSON(dbuser, token))
 }

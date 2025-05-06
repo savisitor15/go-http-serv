@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -9,17 +10,20 @@ import (
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	"github.com/savisitor15/go-http-serv/internal/auth"
 	"github.com/savisitor15/go-http-serv/internal/database"
 )
 
 type apiConfig struct {
 	fileserverHits atomic.Int32
 	dbConnection   *database.Queries
+	supserSecret   string
 }
 
 func main() {
 	godotenv.Load(".env")
 	dbUrl := os.Getenv("DB_URL")
+	secret := os.Getenv("SECRET")
 	const filepathRoot = "."
 	const port = "8080"
 
@@ -29,6 +33,8 @@ func main() {
 	}
 	// Common STATE
 	var apiCfg apiConfig = apiConfig{fileserverHits: atomic.Int32{}}
+	// assign token generator secret
+	apiCfg.supserSecret = secret
 	// asign the db connector
 	apiCfg.dbConnection = database.New(db)
 
@@ -37,7 +43,7 @@ func main() {
 	// API
 	mux.HandleFunc("GET /api/healthz", handlerReadiness)
 	// Chirp management
-	mux.HandleFunc("POST /api/chirps", apiCfg.handlerAddChirp)
+	mux.Handle("POST /api/chirps", apiCfg.middlewareAuthenticated(http.HandlerFunc(apiCfg.handlerAddChirp)))
 	mux.HandleFunc("GET /api/chirps", apiCfg.handlerGetChirps)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handlerGetChirpByID)
 	// Users management
@@ -60,6 +66,30 @@ func main() {
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cfg.fileserverHits.Add(1)
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (cfg *apiConfig) middlewareAuthenticated(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tok, err := auth.GetBearerToken(r.Header)
+		if err != nil {
+			log.Println("Unauthorized access!", err)
+			errorJSONBody(w, 401, errors.New("Unauthorized"))
+			return
+		}
+		uid, err := auth.ValidateJWT(tok, cfg.supserSecret)
+		if err != nil {
+			log.Println("Unauthorized access!", err)
+			errorJSONBody(w, 401, errors.New("Unauthorized"))
+			return
+		}
+		_, err = cfg.dbConnection.GetUserByID(r.Context(), uid)
+		if err != nil {
+			log.Println("Unauthorized access!", err)
+			errorJSONBody(w, 401, errors.New("Unauthorized"))
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
 }

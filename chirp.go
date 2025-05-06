@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/savisitor15/go-http-serv/internal/auth"
 	"github.com/savisitor15/go-http-serv/internal/database"
 )
 
@@ -60,6 +61,21 @@ func (cfg *apiConfig) handlerAddChirp(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 		errorJSONBody(w, 500, err)
 		return
+	}
+	if reqin.User == uuid.Nil {
+		tok, err := auth.GetBearerToken(r.Header)
+		if err != nil {
+			log.Println(err)
+			errorJSONBody(w, 500, err)
+			return
+		}
+		uid, err := auth.ValidateJWT(tok, cfg.supserSecret)
+		if err != nil {
+			log.Println(err)
+			errorJSONBody(w, 500, err)
+			return
+		}
+		reqin.User = uid
 	}
 	if len(reqin.Body) > 140 {
 		log.Println("Chirp is too long!")
