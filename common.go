@@ -28,6 +28,10 @@ func errorJSONBody(w http.ResponseWriter, returnCode int, er error) {
 }
 
 func respondJSONBody(w http.ResponseWriter, returnCode int, payload any) {
+	if payload == nil {
+		w.WriteHeader(returnCode)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	dat, err := json.Marshal(payload)
 	if err == nil {

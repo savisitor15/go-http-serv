@@ -156,3 +156,12 @@ func TestBearerToken(t *testing.T) {
 	}
 
 }
+
+func TestMakeRefreshToken(t *testing.T) {
+	refToken, _ := MakeRefreshToken()
+	length := len(refToken)
+	if length < 64 {
+		t.Errorf("MakeRefreshToken() failed to create a token longer than 64 bytes")
+		return
+	}
+}

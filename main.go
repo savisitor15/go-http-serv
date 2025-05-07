@@ -49,6 +49,8 @@ func main() {
 	// Users management
 	mux.HandleFunc("POST /api/users", apiCfg.handleUserCreation)
 	mux.HandleFunc("POST /api/login", apiCfg.handlerCheckLogin)
+	mux.Handle("POST /api/refresh", apiCfg.middlewareRefToken(http.HandlerFunc(apiCfg.handlerRefreshToken)))
+	mux.Handle("POST /api/revoke", apiCfg.middlewareRefToken(http.HandlerFunc(apiCfg.handlerRevokeToken)))
 
 	// Admin
 	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerMetrics)
@@ -74,19 +76,37 @@ func (cfg *apiConfig) middlewareAuthenticated(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tok, err := auth.GetBearerToken(r.Header)
 		if err != nil {
-			log.Println("Unauthorized access!", err)
+			log.Println("Unauthorized access! JWT", err)
 			errorJSONBody(w, 401, errors.New("Unauthorized"))
 			return
 		}
 		uid, err := auth.ValidateJWT(tok, cfg.supserSecret)
 		if err != nil {
-			log.Println("Unauthorized access!", err)
+			log.Println("Unauthorized access! JWT", err)
 			errorJSONBody(w, 401, errors.New("Unauthorized"))
 			return
 		}
 		_, err = cfg.dbConnection.GetUserByID(r.Context(), uid)
 		if err != nil {
-			log.Println("Unauthorized access!", err)
+			log.Println("Unauthorized access! JWT", err)
+			errorJSONBody(w, 401, errors.New("Unauthorized"))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (cfg *apiConfig) middlewareRefToken(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tok, err := auth.GetBearerToken(r.Header)
+		if err != nil {
+			log.Println("Unauthorized access! RefreshToken", err)
+			errorJSONBody(w, 401, errors.New("Unauthorized"))
+			return
+		}
+		_, err = cfg.FindRefreshToken(r, tok)
+		if err != nil {
+			log.Println("Unauthorized access! RefreshToken", err)
 			errorJSONBody(w, 401, errors.New("Unauthorized"))
 			return
 		}
