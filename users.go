@@ -12,7 +12,7 @@ import (
 	"github.com/savisitor15/go-http-serv/internal/database"
 )
 
-type UserJSON struct {
+type UserJSONAll struct {
 	ID           uuid.UUID `json:"id"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
@@ -21,8 +21,24 @@ type UserJSON struct {
 	RefreshToken string    `json:"refresh_token"`
 }
 
-func convertDbUserToJSON(u database.User, token string, refresh_token string) UserJSON {
+type UserJSON struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Email     string    `json:"email"`
+}
+
+func (u UserJSONAll) GetWithoutTokens() UserJSON {
 	return UserJSON{
+		ID:        u.ID,
+		CreatedAt: u.CreatedAt,
+		UpdatedAt: u.UpdatedAt,
+		Email:     u.Email,
+	}
+}
+
+func convertDbUserToJSON(u database.User, token string, refresh_token string) UserJSONAll {
+	return UserJSONAll{
 		ID:           u.ID,
 		CreatedAt:    u.CreatedAt,
 		UpdatedAt:    u.UpdatedAt,
@@ -203,4 +219,62 @@ func (cfg *apiConfig) handlerRevokeToken(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	respondJSONBody(w, 204, nil)
+}
+
+func (cfg *apiConfig) handlerUpdatePassword(w http.ResponseWriter, r *http.Request) {
+	type reqIn struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	inToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Println("handlerUpdatePassword() error getting the token", err)
+		errorJSONBody(w, 401, errors.New("error unauthenticated"))
+		return
+	}
+	uid, err := auth.ValidateJWT(inToken, cfg.supserSecret)
+	if err != nil {
+		log.Println("handlerUpdatePassword() error getting uuid from token", err)
+		errorJSONBody(w, 401, errors.New("error unauthenticated"))
+		return
+	}
+	user, err := cfg.dbConnection.GetUserByID(r.Context(), uid)
+	if err != nil {
+		log.Println("handlerUpdatePassword() error getting the user from the token uuid", err)
+		errorJSONBody(w, 401, errors.New("error unauthenticated"))
+		return
+	}
+	reqin := reqIn{}
+	err = decodeRequestBody(r, &reqin)
+	if err != nil {
+		log.Println("handlerUpdatePassword() error decoding request body", err)
+		errorJSONBody(w, 500, err)
+		return
+	}
+	// Sanity check
+	user_sec, err := cfg.dbConnection.GetUserByEmail(r.Context(), reqin.Email)
+	if err == nil {
+		// user is already in the database, same user?
+		if user_sec.ID != user.ID {
+			// Conflict!
+			log.Println("handlerUpdatePassword() user tried to update email to another user's email Offender:", user.ID, "Victim:", user_sec.ID, "Email:", reqin.Email)
+			errorJSONBody(w, 403, nil)
+			return
+		}
+	}
+	// We should have everything to prepare to update the user
+	hashed, err := auth.HashPassword(reqin.Password)
+	if err != nil {
+		log.Println("handlerUpdatePassword() hashing password error", err)
+		errorJSONBody(w, 500, errors.New("server side error"))
+		return
+	}
+	params := database.UpdateUserByIDParams{ID: user.ID, HashedPassword: hashed, Email: reqin.Email}
+	user_new, err := cfg.dbConnection.UpdateUserByID(r.Context(), params)
+	if err != nil {
+		log.Println("handlerUpdatePassword() error update user record", err)
+		errorJSONBody(w, 500, errors.New("error updating user record"))
+		return
+	}
+	respondJSONBody(w, 200, convertDbUserToJSON(user_new, "", "").GetWithoutTokens())
 }

@@ -49,6 +49,7 @@ func main() {
 	// Users management
 	mux.HandleFunc("POST /api/users", apiCfg.handleUserCreation)
 	mux.HandleFunc("POST /api/login", apiCfg.handlerCheckLogin)
+	mux.Handle("PUT /api/users", apiCfg.middlewareAuthenticated(http.HandlerFunc(apiCfg.handlerUpdatePassword)))
 	mux.Handle("POST /api/refresh", apiCfg.middlewareRefToken(http.HandlerFunc(apiCfg.handlerRefreshToken)))
 	mux.Handle("POST /api/revoke", apiCfg.middlewareRefToken(http.HandlerFunc(apiCfg.handlerRevokeToken)))
 

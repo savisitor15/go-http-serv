@@ -7,6 +7,10 @@ import (
 )
 
 func errorJSONBody(w http.ResponseWriter, returnCode int, er error) {
+	if er == nil {
+		w.WriteHeader(returnCode)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	if returnCode <= 0 {
 		returnCode = 500 // Default
