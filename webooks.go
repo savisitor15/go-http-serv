@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	"github.com/savisitor15/go-http-serv/internal/auth"
 )
 
 type PolkaRequest struct {
@@ -14,9 +15,20 @@ type PolkaRequest struct {
 	} `json:"data"`
 }
 
-func (cfg apiConfig) handlerProcessChirpyRed(w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) handlerProcessChirpyRed(w http.ResponseWriter, r *http.Request) {
 	inreq := PolkaRequest{}
-	err := decodeRequestBody(r, &inreq)
+	key, err := auth.GetAPIKey(r.Header)
+	if err != nil {
+		log.Println("handlerProcessChirpyRed(), failed to get api key", err)
+		errorJSONBody(w, 401, nil)
+		return
+	}
+	if key != cfg.polkaSecret {
+		log.Println("handlerProcessChirpyRed(), unauthorized access! given:", key, "expected:", cfg.polkaSecret)
+		errorJSONBody(w, 401, nil)
+		return
+	}
+	err = decodeRequestBody(r, &inreq)
 	if err != nil {
 		log.Println("handlerProcessChirpyRed(), failed to decode request body", err)
 		errorJSONBody(w, 500, nil)

@@ -18,12 +18,14 @@ type apiConfig struct {
 	fileserverHits atomic.Int32
 	dbConnection   *database.Queries
 	supserSecret   string
+	polkaSecret    string
 }
 
 func main() {
 	godotenv.Load(".env")
 	dbUrl := os.Getenv("DB_URL")
 	secret := os.Getenv("SECRET")
+	polkaAPIKey := os.Getenv("POLKA_KEY")
 	const filepathRoot = "."
 	const port = "8080"
 
@@ -35,6 +37,8 @@ func main() {
 	var apiCfg apiConfig = apiConfig{fileserverHits: atomic.Int32{}}
 	// assign token generator secret
 	apiCfg.supserSecret = secret
+	// assign the api key for polka
+	apiCfg.polkaSecret = polkaAPIKey
 	// asign the db connector
 	apiCfg.dbConnection = database.New(db)
 
