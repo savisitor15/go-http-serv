@@ -146,7 +146,18 @@ func (cfg *apiConfig) handlerAddChirp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
-	chirps, err := cfg.dbConnection.GetAllChirps(r.Context())
+	author := r.URL.Query().Get("author_id")
+	var chirps []database.Chirp
+	var err error
+	if len(author) > 0 {
+		authorID, err := uuid.Parse(author)
+		if err != nil {
+			log.Println("handlerGetChirps(), error decoding author body", err)
+		}
+		chirps, err = cfg.dbConnection.GetChirpsByAuthor(r.Context(), authorID)
+	} else {
+		chirps, err = cfg.dbConnection.GetAllChirps(r.Context())
+	}
 	if err != nil {
 		log.Println("Error getting chirps", err)
 	}
