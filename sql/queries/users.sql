@@ -25,5 +25,19 @@ hashed_password = $3
 WHERE id = $1
 RETURNING *;
 
+-- name: SetChirpyRedByID :one
+UPDATE users
+SET
+is_chirpy_red = true
+WHERE id = $1
+RETURNING *;
+
+-- name: UnSetChirpyRedByID :one
+UPDATE users
+SET
+is_chirpy_red = false
+WHERE id = $1
+RETURNING *;
+
 -- name: DestroyAllUsers :exec
 DELETE FROM users;

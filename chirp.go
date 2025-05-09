@@ -50,6 +50,51 @@ func censorProfanity(s string) string {
 	return strings.Join(out, " ")
 }
 
+func ChirpIDFromPath(r *http.Request) (uuid.UUID, error) {
+	chirpid := r.PathValue("chirpID")
+	if len(chirpid) == 0 {
+		return uuid.Nil, errors.New("chirpID not in Path")
+	}
+	uid, err := uuid.Parse(chirpid)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return uid, nil
+}
+
+func (cfg *apiConfig) handlerDeleteChirp(w http.ResponseWriter, r *http.Request) {
+	uid, err := ChirpIDFromPath(r)
+	if err != nil {
+		log.Println("handlerDeleteChirp() failed to parse chirp id", err)
+		errorJSONBody(w, 500, errors.New("error parsing chirpid"))
+		return
+	}
+	user, err := cfg.GetUserAuthority(r)
+	if err != nil {
+		errorJSONBody(w, 401, err)
+		return
+	}
+	chirp, err := cfg.dbConnection.GetChirpByID(r.Context(), uid)
+	if err != nil {
+		log.Println("handlerDeleteChirp() failed to find the chirp", err)
+		errorJSONBody(w, 404, errors.New("failed to find chirp"))
+		return
+	}
+	if chirp.UserID != user.ID {
+		// NOT ALLOWED
+		log.Println("handlerDeleteChirp() user trying to delete someone else's chirp")
+		errorJSONBody(w, 403, nil)
+		return
+	}
+	err = cfg.dbConnection.DeleteChirpByID(r.Context(), chirp.ID)
+	if err != nil {
+		log.Println("handlerDeleteChirp() error deleting chirp from data table", err)
+		errorJSONBody(w, 500, errors.New("server side error"))
+		return
+	}
+	respondJSONBody(w, 204, nil)
+}
+
 func (cfg *apiConfig) handlerAddChirp(w http.ResponseWriter, r *http.Request) {
 	type reqIn struct {
 		Body string    `json:"body"`
@@ -114,14 +159,7 @@ func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) handlerGetChirpByID(w http.ResponseWriter, r *http.Request) {
-
-	chirpid := r.PathValue("chirpID")
-	//log.Println("Get chirp by id:", r.PathValue("chirpID"))
-	if len(chirpid) == 0 {
-		errorJSONBody(w, 400, errors.New("chirpid provided invalid"))
-		return
-	}
-	uid, err := uuid.Parse(chirpid)
+	uid, err := ChirpIDFromPath(r)
 	if err != nil {
 		errorJSONBody(w, 500, err)
 		return

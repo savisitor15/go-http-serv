@@ -17,6 +17,7 @@ type UserJSONAll struct {
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 	Email        string    `json:"email"`
+	ChirpyRed    bool      `json:"is_chirpy_red"`
 	Token        string    `json:"token"`
 	RefreshToken string    `json:"refresh_token"`
 }
@@ -26,6 +27,7 @@ type UserJSON struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Email     string    `json:"email"`
+	ChirpyRed bool      `json:"is_chirpy_red"`
 }
 
 func (u UserJSONAll) GetWithoutTokens() UserJSON {
@@ -34,6 +36,7 @@ func (u UserJSONAll) GetWithoutTokens() UserJSON {
 		CreatedAt: u.CreatedAt,
 		UpdatedAt: u.UpdatedAt,
 		Email:     u.Email,
+		ChirpyRed: u.ChirpyRed,
 	}
 }
 
@@ -43,6 +46,7 @@ func convertDbUserToJSON(u database.User, token string, refresh_token string) Us
 		CreatedAt:    u.CreatedAt,
 		UpdatedAt:    u.UpdatedAt,
 		Email:        u.Email,
+		ChirpyRed:    u.IsChirpyRed,
 		Token:        token,
 		RefreshToken: refresh_token,
 	}
@@ -221,27 +225,33 @@ func (cfg *apiConfig) handlerRevokeToken(w http.ResponseWriter, r *http.Request)
 	respondJSONBody(w, 204, nil)
 }
 
+func (cfg *apiConfig) GetUserAuthority(r *http.Request) (database.User, error) {
+	inToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Println("handlerUpdatePassword() error getting the token", err)
+		return database.User{}, errors.New("error unauthenticated")
+	}
+	uid, err := auth.ValidateJWT(inToken, cfg.supserSecret)
+	if err != nil {
+		log.Println("handlerUpdatePassword() error getting uuid from token", err)
+		return database.User{}, errors.New("error unauthenticated")
+	}
+	user, err := cfg.dbConnection.GetUserByID(r.Context(), uid)
+	if err != nil {
+		log.Println("handlerUpdatePassword() error getting the user from the token uuid", err)
+		return database.User{}, errors.New("error unauthenticated")
+	}
+	return user, nil
+}
+
 func (cfg *apiConfig) handlerUpdatePassword(w http.ResponseWriter, r *http.Request) {
 	type reqIn struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
-	inToken, err := auth.GetBearerToken(r.Header)
+	user, err := cfg.GetUserAuthority(r)
 	if err != nil {
-		log.Println("handlerUpdatePassword() error getting the token", err)
-		errorJSONBody(w, 401, errors.New("error unauthenticated"))
-		return
-	}
-	uid, err := auth.ValidateJWT(inToken, cfg.supserSecret)
-	if err != nil {
-		log.Println("handlerUpdatePassword() error getting uuid from token", err)
-		errorJSONBody(w, 401, errors.New("error unauthenticated"))
-		return
-	}
-	user, err := cfg.dbConnection.GetUserByID(r.Context(), uid)
-	if err != nil {
-		log.Println("handlerUpdatePassword() error getting the user from the token uuid", err)
-		errorJSONBody(w, 401, errors.New("error unauthenticated"))
+		errorJSONBody(w, 401, err)
 		return
 	}
 	reqin := reqIn{}

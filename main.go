@@ -44,6 +44,7 @@ func main() {
 	mux.HandleFunc("GET /api/healthz", handlerReadiness)
 	// Chirp management
 	mux.Handle("POST /api/chirps", apiCfg.middlewareAuthenticated(http.HandlerFunc(apiCfg.handlerAddChirp)))
+	mux.Handle("DELETE /api/chirps/{chirpID}", apiCfg.middlewareAuthenticated(http.HandlerFunc(apiCfg.handlerDeleteChirp)))
 	mux.HandleFunc("GET /api/chirps", apiCfg.handlerGetChirps)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handlerGetChirpByID)
 	// Users management
@@ -52,7 +53,8 @@ func main() {
 	mux.Handle("PUT /api/users", apiCfg.middlewareAuthenticated(http.HandlerFunc(apiCfg.handlerUpdatePassword)))
 	mux.Handle("POST /api/refresh", apiCfg.middlewareRefToken(http.HandlerFunc(apiCfg.handlerRefreshToken)))
 	mux.Handle("POST /api/revoke", apiCfg.middlewareRefToken(http.HandlerFunc(apiCfg.handlerRevokeToken)))
-
+	// Webhooks
+	mux.HandleFunc("POST /api/polka/webhooks", apiCfg.handlerProcessChirpyRed)
 	// Admin
 	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerMetrics)
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
@@ -75,23 +77,10 @@ func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 
 func (cfg *apiConfig) middlewareAuthenticated(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tok, err := auth.GetBearerToken(r.Header)
+		_, err := cfg.GetUserAuthority(r)
 		if err != nil {
-			log.Println("Unauthorized access! JWT", err)
-			errorJSONBody(w, 401, errors.New("Unauthorized"))
-			return
-		}
-		uid, err := auth.ValidateJWT(tok, cfg.supserSecret)
-		if err != nil {
-			log.Println("Unauthorized access! JWT", err)
-			errorJSONBody(w, 401, errors.New("Unauthorized"))
-			return
-		}
-		_, err = cfg.dbConnection.GetUserByID(r.Context(), uid)
-		if err != nil {
-			log.Println("Unauthorized access! JWT", err)
-			errorJSONBody(w, 401, errors.New("Unauthorized"))
-			return
+			log.Println("middlewareAuthenticated() failed", err)
+			errorJSONBody(w, 401, err)
 		}
 		next.ServeHTTP(w, r)
 	})
