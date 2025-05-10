@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -19,6 +20,12 @@ type ChirpJSON struct {
 	Body      string    `json:"body"`
 	UserID    uuid.UUID `json:"user_id"`
 }
+
+type ByCreated []database.Chirp
+
+func (a ByCreated) Len() int           { return len(a) }
+func (a ByCreated) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByCreated) Less(i, j int) bool { return a[i].CreatedAt.Before(a[j].CreatedAt) }
 
 func (c *ChirpJSON) ConvertChirpFromDB(chirp database.Chirp) ChirpJSON {
 	c.ID = chirp.ID
@@ -147,6 +154,11 @@ func (cfg *apiConfig) handlerAddChirp(w http.ResponseWriter, r *http.Request) {
 
 func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
 	author := r.URL.Query().Get("author_id")
+	order := r.URL.Query().Get("sort")
+	order = strings.ToUpper(order)
+	if len(order) == 0 {
+		order = "ASC"
+	}
 	var chirps []database.Chirp
 	var err error
 	if len(author) > 0 {
@@ -160,6 +172,9 @@ func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		log.Println("Error getting chirps", err)
+	}
+	if order != "ASC" {
+		sort.Sort(sort.Reverse(ByCreated(chirps)))
 	}
 	// reformat so JSON stays consistent
 	out := make([]ChirpJSON, len(chirps))
