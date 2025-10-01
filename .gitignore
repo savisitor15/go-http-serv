@@ -27,3 +27,4 @@ go.work.sum
 
 # ignore generated database boilerplate - generate using sqlc
 internal/database
+
